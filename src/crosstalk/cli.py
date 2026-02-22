@@ -37,7 +37,11 @@ def cli() -> None:
     "--personas", "-p", default=None,
     help="Comma-separated personas matching agents (e.g., architect,critic)",
 )
-def start(topic: str, agents: str, max_turns: int, personas: str | None) -> None:
+@click.option(
+    "--quiet", "-q", is_flag=True, default=False,
+    help="Suppress live turn output; only print the final summary",
+)
+def start(topic: str, agents: str, max_turns: int, personas: str | None, quiet: bool) -> None:
     """Start a new multi-agent conversation."""
     agent_list = [a.strip() for a in agents.split(",")]
 
@@ -68,7 +72,7 @@ def start(topic: str, agents: str, max_turns: int, personas: str | None) -> None
         max_turns=max_turns,
     )
 
-    asyncio.run(run_conversation(conv))
+    asyncio.run(run_conversation(conv, quiet=quiet))
 
 
 @cli.command("list")
@@ -123,7 +127,11 @@ def view(conv_id: str) -> None:
     "--extra-turns", "-t", default=10, type=int,
     help="Additional turns to run (default: 10)",
 )
-def resume(conv_id: str, extra_turns: int) -> None:
+@click.option(
+    "--quiet", "-q", is_flag=True, default=False,
+    help="Suppress live turn output; only print the final summary",
+)
+def resume(conv_id: str, extra_turns: int, quiet: bool) -> None:
     """Resume a past conversation with additional turns."""
     conv_dir = CONVERSATIONS_DIR / conv_id
     if not conv_dir.exists():
@@ -138,7 +146,7 @@ def resume(conv_id: str, extra_turns: int) -> None:
         f"{len(conv.messages)} existing turns, adding up to {extra_turns} more"
     )
 
-    asyncio.run(run_conversation(conv))
+    asyncio.run(run_conversation(conv, quiet=quiet))
 
 
 @cli.command("personas")

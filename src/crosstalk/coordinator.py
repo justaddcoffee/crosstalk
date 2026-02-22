@@ -3,21 +3,23 @@
 from __future__ import annotations
 
 import traceback
+from datetime import datetime, timezone
 
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+from rich.table import Table
 
 from crosstalk.agents import create_agent, AgentBackend
 from crosstalk.logger import append_message
 from crosstalk.models import Conversation, Message
 from crosstalk.personas import load_persona
 
-console = Console()
 
-
-async def run_conversation(conv: Conversation) -> None:
+async def run_conversation(conv: Conversation, quiet: bool = False) -> None:
     """Run the main conversation loop."""
+    console = Console(stderr=True)
+
     conv.save_meta()
 
     agents: dict[str, AgentBackend] = {}
@@ -30,16 +32,22 @@ async def run_conversation(conv: Conversation) -> None:
         persona_name = conv.personas.get(agent_name, "default")
         persona_prompts[agent_name] = load_persona(persona_name)
 
-    console.print(
-        Panel(
-            f"[bold]{conv.topic}[/bold]\n"
-            f"Agents: {', '.join(conv.agents)} | Max turns: {conv.max_turns}",
-            title="Crosstalk",
-            border_style="blue",
+    if not quiet:
+        agents_str = ", ".join(
+            f"{a} ({conv.personas.get(a, 'default')})" for a in conv.agents
         )
-    )
+        console.print(
+            Panel(
+                f"[bold]{conv.topic}[/bold]\n"
+                f"Agents: {agents_str}\n"
+                f"Max turns: {conv.max_turns} | ID: {conv.conv_id}",
+                title="Crosstalk",
+                border_style="blue",
+            )
+        )
 
     turn = len(conv.messages)
+    consensus = False
 
     while turn < conv.max_turns:
         agent_name = conv.agents[turn % len(conv.agents)]
@@ -47,10 +55,11 @@ async def run_conversation(conv: Conversation) -> None:
         persona_name = conv.personas.get(agent_name, "default")
         persona_prompt = persona_prompts[agent_name]
 
-        console.print(
-            f"\n[dim]Turn {turn + 1}/{conv.max_turns} — "
-            f"waiting for {agent_name} ({persona_name})...[/dim]"
-        )
+        if not quiet:
+            console.print(
+                f"\n[dim]Turn {turn + 1}/{conv.max_turns} — "
+                f"waiting for {agent_name} ({persona_name})...[/dim]"
+            )
 
         try:
             response = await agent.send(conv.messages, persona_prompt, conv.topic)
@@ -78,21 +87,53 @@ async def run_conversation(conv: Conversation) -> None:
         )
         append_message(conv, msg)
 
-        console.print(
-            Panel(
-                Markdown(response),
-                title=f"{agent_name.capitalize()} ({persona_name})",
-                border_style="green" if agent_name == "claude" else "cyan",
+        if not quiet:
+            console.print(
+                Panel(
+                    Markdown(response),
+                    title=f"{agent_name.capitalize()} ({persona_name})",
+                    border_style="green" if agent_name == "claude" else "cyan",
+                )
             )
-        )
 
         turn += 1
 
         if "CONSENSUS" in response.upper():
-            console.print("\n[bold green]Consensus reached![/bold green]")
+            consensus = True
+            if not quiet:
+                console.print("\n[bold green]Consensus reached![/bold green]")
             break
 
-    console.print(
-        f"\n[bold]Conversation complete.[/bold] "
-        f"{len(conv.messages)} turns logged to {conv.conv_dir}"
+    # Always print the summary
+    _print_summary(console, conv, consensus)
+
+
+def _print_summary(console: Console, conv: Conversation, consensus: bool) -> None:
+    """Print an end-of-run summary."""
+    table = Table(
+        title="Conversation Summary",
+        show_header=False,
+        border_style="blue",
+        padding=(0, 1),
     )
+    table.add_column("Key", style="bold")
+    table.add_column("Value")
+
+    table.add_row("Topic", conv.topic)
+    table.add_row("ID", conv.conv_id)
+    table.add_row("Turns", str(len(conv.messages)))
+
+    speakers = {}
+    for msg in conv.messages:
+        label = f"{msg.sender} ({msg.persona})"
+        speakers[label] = speakers.get(label, 0) + 1
+    speakers_str = ", ".join(f"{k}: {v}" for k, v in speakers.items())
+    table.add_row("Speakers", speakers_str)
+
+    outcome = "Consensus" if consensus else f"Completed ({len(conv.messages)} turns)"
+    table.add_row("Outcome", outcome)
+    table.add_row("Transcript", str(conv.transcript_path))
+    table.add_row("Log", str(conv.messages_path))
+
+    console.print()
+    console.print(table)
