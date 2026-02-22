@@ -1,0 +1,16 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Conversation logs (generated at runtime)
+conversations/
+
+# Claude Code project files
+.claude/

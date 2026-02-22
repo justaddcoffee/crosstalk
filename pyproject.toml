@@ -1,0 +1,20 @@
+[project]
+name = "crosstalk"
+version = "0.1.0"
+description = "Multi-agent chat and collaboration system"
+readme = "README.md"
+authors = [
+    { name = "Justin Reese", email = "justaddcoffee+github@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "click>=8.3.1",
+    "rich>=14.3.3",
+]
+
+[project.scripts]
+crosstalk = "crosstalk.cli:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
